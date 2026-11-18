@@ -1,6 +1,6 @@
 # CRYO Loader
 
-A new front end for Open PS2 Loader, made for real PS2 hardware. You get a cover-flow game library, a page for each game, and a settings menu redesigned from scratch. Game loading itself is still stock OPL.
+a fun new ux for loadingh your games on a modded PS2! game loading itself is still stock OPL.
 
 > [!WARNING]
 > **CRYO Loader uses your existing `OPL` folder and its settings.** Before you try it, rename that folder to `OPLBAK` (on the memory card, and on any drive you keep one on) so your working OPL setup stays untouched. This is heavily recommended, especially with alpha builds.
