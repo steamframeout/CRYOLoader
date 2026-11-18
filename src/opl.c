@@ -5,6 +5,7 @@
 */
 
 #include "include/opl.h"
+#include "include/cryo_opl.h"
 #include "include/ioman.h"
 #include "include/gui.h"
 #include "include/guigame.h"
@@ -157,6 +158,7 @@ int gSFXVolume;
 int gBootSndVolume;
 int gBGMVolume;
 char gDefaultBGMPath[128];
+char gBootSndPath[128];
 int gCheatSource;
 int gGSMSource;
 int gPadEmuSource;
@@ -285,6 +287,20 @@ static void itemExecSelect(struct menu_item *curMenu)
         }
     } else
         guiMsgBox("NULL Support object. Please report", 0, NULL);
+}
+
+/* Cryo Loader: start a device that is set to start manually (what pressing select on it did in the old menu) */
+void oplStartDevice(item_list_t *support)
+{
+    int i;
+    if (!support || support->enabled)
+        return;
+    if (support->mode == BDM_MODE) {
+        for (i = 0; i <= BDM_MODE4; i++)
+            if (list_support[i].support)
+                itemInitSupport(list_support[i].support);
+    } else
+        itemInitSupport(support);
 }
 
 static void itemExecRefresh(struct menu_item *curMenu)
@@ -964,6 +980,7 @@ static void _loadConfig()
             configGetInt(configOPL, CONFIG_OPL_BOOT_SND_VOLUME, &gBootSndVolume);
             configGetInt(configOPL, CONFIG_OPL_BGM_VOLUME, &gBGMVolume);
             configGetStrCopy(configOPL, CONFIG_OPL_DEFAULT_BGM_PATH, gDefaultBGMPath, sizeof(gDefaultBGMPath));
+            configGetStrCopy(configOPL, CONFIG_OPL_BOOT_SND_PATH, gBootSndPath, sizeof(gBootSndPath));
         }
     }
 
@@ -1134,6 +1151,7 @@ static void _saveConfig()
         configSetInt(configOPL, CONFIG_OPL_BOOT_SND_VOLUME, gBootSndVolume);
         configSetInt(configOPL, CONFIG_OPL_BGM_VOLUME, gBGMVolume);
         configSetStr(configOPL, CONFIG_OPL_DEFAULT_BGM_PATH, gDefaultBGMPath);
+        configSetStr(configOPL, CONFIG_OPL_BOOT_SND_PATH, gBootSndPath);
         configSetInt(configOPL, CONFIG_OPL_XSENSITIVITY, gXSensitivity);
         configSetInt(configOPL, CONFIG_OPL_YSENSITIVITY, gYSensitivity);
 
@@ -1758,6 +1776,7 @@ static void setDefaults(void)
     gBootSndVolume = 80;
     gBGMVolume = 70;
     gDefaultBGMPath[0] = '\0';
+    gBootSndPath[0] = '\0';
     gXSensitivity = 1;
     gYSensitivity = 1;
 
@@ -1815,11 +1834,23 @@ static void init(void)
 
     gSelectButton = (InitConsoleRegionData() == CONSOLE_REGION_JAPAN) ? KEY_CIRCLE : KEY_CROSS;
 
+    // Cryo Loader: the sounds load first on the I/O thread, ahead of the device scans the config starts,
+    // so the boot screen (and its sound) does not wait for USB or the network
+    if (gCryo)
+        ioPutRequest(IO_CUSTOM_SIMPLEACTION, &deferredAudioInit);
+
     while (!padStatus)
         padStatus = startPads();
     readPads();
+    if (gCryo)
+        gCryoTrace = getKeyPressed(KEY_SELECT);
     if (!getKeyPressed(KEY_START)) {
         _loadConfig(); // only try to restore config if emergency key is not being pressed
+        // Cryo Loader: triangle held at start brings back 480i (a 480p setting on a TV that cannot show it)
+        if (gCryo && getKeyPressed(KEY_TRIANGLE) && gVMode != 2) {
+            gVMode = 2;
+            rmSetMode(0);
+        }
     } else {
         LOG("--- SKIPPING OPL CONFIG LOADING\n");
         applyConfig(-1, -1, 0);
@@ -1827,7 +1858,8 @@ static void init(void)
 
 
     // queue deffered init of sound effects, which will take place after the preceding initialization steps within the queue are complete.
-    ioPutRequest(IO_CUSTOM_SIMPLEACTION, &deferredAudioInit);
+    if (!gCryo)
+        ioPutRequest(IO_CUSTOM_SIMPLEACTION, &deferredAudioInit);
 }
 
 static void deferredInit(void)

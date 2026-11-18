@@ -1,0 +1,33 @@
+pre dev HDD
+wait 6500
+tap start
+wait 900
+shot s0_theme
+tap r1
+wait 700
+shot s1_display
+tap r1
+wait 700
+shot s2_audio
+tap r1
+wait 700
+shot s3_controls
+tap r1
+wait 700
+shot s4_devices
+tap r1
+wait 700
+shot s5_network
+tap r1
+wait 700
+shot s6_general
+tap r1
+wait 700
+shot s7_tags
+tap r1
+wait 700
+shot s8_about
+tap o
+wait 1200
+shot closed
+end

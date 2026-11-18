@@ -8,6 +8,7 @@ enum CONFIG_INDEX {
     CONFIG_INDEX_APPS,
     CONFIG_INDEX_NETWORK,
     CONFIG_INDEX_GAME,
+    CONFIG_INDEX_CRYO, // Cryo Loader: its settings, tag edits and "last played" times
 
     CONFIG_INDEX_COUNT
 };
@@ -18,6 +19,7 @@ enum CONFIG_INDEX {
 #define CONFIG_APPS    (1 << CONFIG_INDEX_APPS)
 #define CONFIG_NETWORK (1 << CONFIG_INDEX_NETWORK)
 #define CONFIG_GAME    (1 << CONFIG_INDEX_GAME)
+#define CONFIG_CRYO    (1 << CONFIG_INDEX_CRYO)
 #define CONFIG_ALL     0xFF
 
 #define CONFIG_SOURCE_DEFAULT 0
@@ -113,6 +115,7 @@ enum CONFIG_INDEX {
 #define CONFIG_OPL_BOOT_SND_VOLUME      "boot_snd_volume"
 #define CONFIG_OPL_BGM_VOLUME           "bgm_volume"
 #define CONFIG_OPL_DEFAULT_BGM_PATH     "default_bgm_path"
+#define CONFIG_OPL_BOOT_SND_PATH        "boot_snd_path" // Cryo Loader
 #define CONFIG_OPL_XSENSITIVITY         "x_sensitivity"
 #define CONFIG_OPL_YSENSITIVITY         "y_sensitivity"
 

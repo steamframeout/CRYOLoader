@@ -1,0 +1,9 @@
+# auto start last played: count from 3, then the game opens and starts
+flag autostart 3
+wait 6500
+shot count
+wait 2200
+shot opening
+wait 1500
+shot launch
+end

@@ -1,0 +1,11 @@
+# boot sound: skip, then launch a game
+wait 800
+tap x
+wait 1500
+tap x
+wait 900
+shot detail
+tap x
+wait 2500
+shot launch
+end

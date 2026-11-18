@@ -11,6 +11,8 @@
 #include "include/opl.h"
 #include "include/ioman.h"
 #include "include/themes.h"
+#include "include/cryo_opl.h"
+
 
 // Silence unused variable warnings from vorbisfile.h
 static ov_callbacks OV_CALLBACKS_NOCLOSE __attribute__((unused));
@@ -66,6 +68,7 @@ static struct sfxEffect sfx_files[SFX_COUNT] = {
 
 static struct audsrv_adpcm_t sfx[SFX_COUNT];
 static int audio_initialized = 0;
+
 
 // Returns 0 if the specified file was read. The sfxEffect structure will not be updated unless the file is successfully read.
 static int sfxRead(const char *full_path, struct sfxEffect *sfx)
@@ -175,6 +178,9 @@ int sfxInit(int bootSnd)
         return -1;
     }
 
+    if (gCryo)
+        return cryoSfxInit();
+
     audsrv_adpcm_init();
     sfxInitDefaults();
     audioSetVolume();
@@ -232,6 +238,11 @@ void sfxPlay(int id)
 {
     if (!audio_initialized) {
         LOG("SFX: %s: ERROR: not initialized!\n", __FUNCTION__);
+        return;
+    }
+
+    if (gCryo) {
+        cryoSfxPlayOpl(id);
         return;
     }
 
@@ -549,6 +560,9 @@ void audioEnd(void)
     if (gEnableBGM && isBgmPlaying())
         bgmStop();
 
+    if (gCryo)
+        cryoSfxEnd();
+
     audsrv_quit();
     audio_initialized = 0;
 }
@@ -562,9 +576,17 @@ void audioSetVolume(void)
         return;
     }
 
+    if (gCryo) {
+        /* Cryo's voices take their levels when they start; the boot sound follows at once */
+        cryoSfxLevels();
+        audsrv_set_volume(gBGMVolume);
+        return;
+    }
+
     for (i = 1; i < SFX_COUNT; i++)
         audsrv_adpcm_set_volume(i, gSFXVolume);
 
     audsrv_adpcm_set_volume(0, gBootSndVolume);
     audsrv_set_volume(gBGMVolume);
 }
+

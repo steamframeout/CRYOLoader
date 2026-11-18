@@ -1,0 +1,7 @@
+# auto start cancelled by a button
+flag autostart 3
+wait 6000
+tap right
+wait 4000
+shot stayed
+end

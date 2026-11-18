@@ -14,6 +14,10 @@
 #include "include/themes.h"
 #include "include/util.h"
 #include "include/sound.h"
+#include "include/cryo_opl.h"
+
+/* Cryo Loader: OPL's dialogs are shown as Cryo panels (src/cryo/cryo_dia.c) */
+int cdia_run(struct UIItem *ui, int uiId, int (*updater)(int modified));
 
 // UI spacing of the dialogues (pixels between consecutive items)
 #define UI_SPACING_H      10
@@ -50,6 +54,9 @@ static void diaDrawBoundingBox(int x, int y, int w, int h, int focus)
 
 int diaShowKeyb(char *text, int maxLen, int hide_text, const char *title)
 {
+    if (gCryo)
+        return cryoShowKeyb(text, maxLen, hide_text, title);
+
     int i, j, len = strlen(text), selkeyb = 0, x, w;
     int selchar = 0, selcommand = -1;
     char c[2] = "\0\0", *mask_buffer;
@@ -856,6 +863,9 @@ static struct UIItem *diaFindByID(struct UIItem *ui, int id)
 
 int diaExecuteDialog(struct UIItem *ui, int uiId, short inMenu, int (*updater)(int modified))
 {
+    if (gCryo)
+        return cdia_run(ui, uiId, updater);
+
     rmGetScreenExtents(&screenWidth, &screenHeight);
 
     struct UIItem *cur = NULL;

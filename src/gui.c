@@ -23,6 +23,7 @@
 #include "include/cheatman.h"
 #include "include/sound.h"
 #include "include/guigame.h"
+#include "include/cryo_opl.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -885,6 +886,17 @@ static void guiSetAudioSettingsState(void)
     diaGetInt(diaAudioConfig, CFG_BOOT_SND_VOLUME, &gBootSndVolume);
     diaGetInt(diaAudioConfig, CFG_BGM_VOLUME, &gBGMVolume);
     diaGetString(diaAudioConfig, CFG_DEFAULT_BGM_PATH, gDefaultBGMPath, sizeof(gDefaultBGMPath));
+    {
+        /* Cryo Loader: a new boot sound file is loaded at once (Settings › Audio › Play boot sound) */
+        char bp[sizeof(gBootSndPath)];
+        diaGetString(diaAudioConfig, CFG_BOOT_SND_PATH, bp, sizeof(bp));
+        if (strcmp(bp, gBootSndPath)) {
+            strncpy(gBootSndPath, bp, sizeof(gBootSndPath) - 1);
+            gBootSndPath[sizeof(gBootSndPath) - 1] = 0;
+            if (gCryo)
+                sfxCryoBootChanged();
+        }
+    }
     audioSetVolume();
 
     if (gEnableBGM && !isBgmPlaying())
@@ -909,6 +921,7 @@ void guiShowAudioConfig(void)
     diaSetInt(diaAudioConfig, CFG_BOOT_SND_VOLUME, gBootSndVolume);
     diaSetInt(diaAudioConfig, CFG_BGM_VOLUME, gBGMVolume);
     diaSetString(diaAudioConfig, CFG_DEFAULT_BGM_PATH, gDefaultBGMPath);
+    diaSetString(diaAudioConfig, CFG_BOOT_SND_PATH, gBootSndPath);
 
     diaExecuteDialog(diaAudioConfig, -1, 1, guiAudioUpdater);
 }
@@ -1517,9 +1530,86 @@ static void guiShow()
         screenHandler->renderScreen();
 }
 
+/* ---- Cryo Loader: the front end's own intro and main loops ---- */
+
+/* Settings are loaded by now. The sounds load first on the I/O thread (see init in opl.c): wait a moment
+   for them so the boot sound starts with the boot screen, but never long. Devices keep starting in the
+   background; the boot screen shows them as they come. */
+static void cryoIntroLoop(void)
+{
+    clock_t t0 = clock();
+
+    cryoTrace(1);
+    while (!sfxCryoReady() && clock() - t0 < CLOCKS_PER_SEC * 3 / 2) {
+        guiStartFrame();
+        cryoGfxFrameStart();
+        guiHandleDeferredOps();
+        guiEndFrame();
+    }
+
+    cryoOplInit();
+    endIntro = 1;
+}
+
+extern u32 cryo_ft_ext[5];
+
+static void cryoMainLoop(void)
+{
+    int bgmStarted = 0;
+
+    while (!gTerminate) {
+        /* the trace's slow-frame log splits each frame's time: lock wait, pads, deferred ops, GS + vsync, input, hook */
+        clock_t t = clock(), t2;
+#define FT_STEP(i)                       \
+    t2 = clock();                        \
+    cryo_ft_ext[i] += (u32)(t2 - t);     \
+    t = t2
+        guiStartFrame();
+        FT_STEP(0);
+        guiReadPads();
+        FT_STEP(1);
+        cryoOplFrame();
+        t = clock();
+        guiHandleDeferredOps();
+        FT_STEP(2);
+        guiEndFrame();
+        FT_STEP(3);
+
+        /* input runs between frames: it may open screens that run frames of their own */
+        cryoOplInput();
+        t = clock();
+
+        if (gFrameHook)
+            gFrameHook();
+        FT_STEP(4);
+#undef FT_STEP
+
+        /* theme music starts once the boot sound has finished (or faded) */
+        if (!bgmStarted && !sfxCryoBootAudible()) {
+            bgmStarted = 1;
+            if (gEnableBGM && !isBgmPlaying()) {
+                audioSetVolume(); /* the music volume from the settings */
+                bgmStart();
+            }
+        }
+    }
+}
+
+/* one frame of whatever Cryo shows, while OPL waits for something */
+static void cryoIdleFrame(void)
+{
+    cryoTextScreen(NULL);
+}
+
 void guiIntroLoop(void)
 {
     int greetingAlpha = 0x80;
+
+    if (gCryo) {
+        cryoIntroLoop();
+        return;
+    }
+
     const int fadeFrameCount = 0x80 / 2;
     const int fadeDuration = (fadeFrameCount * 1000) / 55; // Average between 50 and 60 fps
     clock_t tFadeDelayEnd = 0;
@@ -1560,6 +1650,11 @@ void guiIntroLoop(void)
 
 void guiMainLoop(void)
 {
+    if (gCryo) {
+        cryoMainLoop();
+        return;
+    }
+
     guiResetNotifications();
     guiCheckNotifications(1, 1);
 
@@ -1647,6 +1742,9 @@ int guiMsgBox(const char *text, int addAccept, struct UIItem *ui)
 {
     int terminate = 0;
 
+    if (gCryo)
+        return cryoMsgBox(text, addAccept);
+
     sfxPlay(SFX_MESSAGE);
 
     while (!terminate) {
@@ -1699,6 +1797,12 @@ void guiGameHandleDeferedIO(int *ptr, struct UIItem *ui, int type, void *data)
 {
     ioPutRequest(type, data);
 
+    if (gCryo) {
+        while (*ptr)
+            cryoIdleFrame();
+        return;
+    }
+
     while (*ptr) {
         guiStartFrame();
         if (ui)
@@ -1711,6 +1815,11 @@ void guiGameHandleDeferedIO(int *ptr, struct UIItem *ui, int type, void *data)
 
 void guiRenderTextScreen(const char *message)
 {
+    if (gCryo) {
+        cryoTextScreen(message);
+        return;
+    }
+
     guiStartFrame();
 
     guiShow();
@@ -1726,6 +1835,12 @@ void guiRenderTextScreen(const char *message)
 
 void guiWarning(const char *text, int count)
 {
+    if (gCryo) {
+        cryoTextScreen(text);
+        delay(count);
+        return;
+    }
+
     guiStartFrame();
 
     guiShow();
@@ -1746,6 +1861,9 @@ int guiConfirmVideoMode(void)
 {
     clock_t timeEnd;
     int terminate = 0;
+
+    if (gCryo)
+        return 1; /* Cryo's video mode is fixed */
 
     sfxPlay(SFX_MESSAGE);
 
@@ -1792,6 +1910,13 @@ int guiGameShowRemoveSettings(config_set_t *configSet, config_set_t *configGame)
 {
     int terminate = 0;
     char message[256];
+
+    if (gCryo) {
+        if (!cryoMsgBox("Remove this game's own settings? Its compatibility modes, VMC, GSM, cheat and pad settings go back to the defaults.", 1))
+            return 0;
+        guiGameRemoveSettings(configSet);
+        return 1;
+    }
 
     sfxPlay(SFX_MESSAGE);
 
@@ -1856,6 +1981,13 @@ void guiManageCheats(config_set_t *configSet)
 
     while (cheatCount < MAX_CODES && strlen(gCheats[cheatCount].name) > 0)
         cheatCount++;
+
+    if (gCryo) {
+        cryoManageCheats(cheatCount);
+        cheatConfigSaveSelections(configSet);
+        configWrite(configSet);
+        return;
+    }
 
     sfxPlay(SFX_MESSAGE);
 

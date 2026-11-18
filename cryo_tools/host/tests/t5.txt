@@ -1,0 +1,56 @@
+pre dev BDM
+wait 6500
+tap x
+wait 1500
+axis ry 1 900
+wait 300
+tap up
+wait 500
+shot d_tools
+tap x
+wait 1200
+shot g0_compat
+tap down 3
+wait 400
+shot g0b
+tap r1
+wait 800
+shot g1_vmc
+tap r1
+wait 700
+shot g2_cheats
+tap r1
+wait 700
+shot g3_gsm
+tap r1
+wait 700
+shot g4_pads
+tap r1
+wait 700
+shot g5_osd
+tap r1
+wait 700
+shot g6_file
+tap down
+tap x
+wait 1200
+shot e0_edit
+tap x
+wait 900
+shot e1_osk
+tap o
+wait 800
+tap down 3
+wait 300
+tap x
+wait 900
+shot e2_menu
+tap o
+wait 600
+tap o
+wait 900
+shot e3_dirty
+tap o
+wait 1200
+shot e4_back
+end

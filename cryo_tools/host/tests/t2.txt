@@ -1,0 +1,18 @@
+pre dev HDD
+wait 7000
+shot lib
+tap x
+wait 1500
+shot detail
+tap o
+wait 1200
+shot back
+tap sel
+wait 1000
+shot list
+tap up
+wait 600
+tap x
+wait 700
+shot menu
+end

@@ -5,6 +5,8 @@
 #include "include/gui.h"
 #include "include/util.h"
 #include "include/renderman.h"
+#include "include/cryo_opl.h"
+#include <time.h>
 
 typedef struct
 {
@@ -37,10 +39,24 @@ static void cacheLoadImage(void *data)
     GSTEXTURE *texture = &req->entry->texture;
     texFree(texture);
 
-    if (handler->itemGetImage(handler, req->cache->prefix, req->cache->isPrefixRelative, req->value, req->cache->suffix, texture, GS_PSM_CT24) < 0)
+    clock_t t0 = clock(), t1;
+    if (gCryo)
+        texSetArtFit(req->cache->userId);
+    int got = handler->itemGetImage(handler, req->cache->prefix, req->cache->isPrefixRelative, req->value, req->cache->suffix, texture, GS_PSM_CT24);
+    texSetArtFit(0);
+    if (got < 0) {
         req->entry->lastUsed = 0;
-    else
+        if (gCryoTrace)
+            cp_debug("art %d %s: none (%u us)", req->cache->userId, req->value, (unsigned)(clock() - t0));
+    } else {
+        t1 = clock();
+        if (gCryo)
+            cryoFitArt(texture, req->cache->userId); /* Cryo Loader: big covers are scaled down as they load (if the PNG loader did not) */
+        if (gCryoTrace)
+            cp_debug("art %d %s: %dx%d psm %d, load %u us + fit %u us", req->cache->userId, req->value, texture->Width, texture->Height, texture->PSM,
+                     (unsigned)(t1 - t0), (unsigned)(clock() - t1));
         req->entry->lastUsed = guiFrameId;
+    }
 
     req->entry->qr = NULL;
 

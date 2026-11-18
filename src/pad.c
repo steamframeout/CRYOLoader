@@ -241,6 +241,12 @@ static u32 readLeftJoy(struct pad_data_t *pad, u32 pdata)
     return padData;
 }
 
+#ifdef PADEMU
+/* Cryo Loader: which ports have a DualShock 3/4 running over USB or Bluetooth (their sticks arrive in
+   pad->buttons although the port itself may be empty) */
+static int bt_run[2], usb_run[2];
+#endif
+
 static int readPad(struct pad_data_t *pad)
 {
     int rcode = 0, oldState, newState, ret, padsRead;
@@ -271,21 +277,39 @@ static int readPad(struct pad_data_t *pad)
     }
 
 #ifdef PADEMU
-    if (ds34bt_get_status(pad->port) & DS34BT_STATE_RUNNING) {
-        ret = ds34bt_get_data(pad->port, (u8 *)&pad->buttons.btns);
-        ds34bt_set_rumble(pad->port, 0, 0);
-        if (ret != 0) {
-            newpdata |= 0xffff ^ pad->buttons.btns;
-            padsRead++;
+    {
+        /* Each of these is a call to the IOP that waits for its answer, and the IOP is often busy with the
+           disk: asking every frame for the status of controllers that are not there cost ~0.3 ms a frame,
+           and several ms while covers load. The status is asked twice a second; the buttons of a running
+           controller every frame; rumble is stopped once, when it starts running. (cpu_ticks wraps every
+           ~15 s; the unsigned difference then just asks early) */
+        static u32 polled[2];
+        int p = pad->port & 1, bt, usb;
+        u32 now = cpu_ticks() / CLOCKS_PER_MILISEC;
+        if (!polled[p] || now - polled[p] >= 500) {
+            polled[p] = now ? now : 1;
+            bt = (ds34bt_get_status(pad->port) & DS34BT_STATE_RUNNING) != 0;
+            usb = (ds34usb_get_status(pad->port) & DS34USB_STATE_RUNNING) != 0;
+            if (bt && !bt_run[p])
+                ds34bt_set_rumble(pad->port, 0, 0);
+            if (usb && !usb_run[p])
+                ds34usb_set_rumble(pad->port, 0, 0);
+            bt_run[p] = bt;
+            usb_run[p] = usb;
         }
-    }
-
-    if (ds34usb_get_status(pad->port) & DS34USB_STATE_RUNNING) {
-        ret = ds34usb_get_data(pad->port, (u8 *)&pad->buttons.btns);
-        ds34usb_set_rumble(pad->port, 0, 0);
-        if (ret != 0) {
-            newpdata |= 0xffff ^ pad->buttons.btns;
-            padsRead++;
+        if (bt_run[p]) {
+            ret = ds34bt_get_data(pad->port, (u8 *)&pad->buttons.btns);
+            if (ret != 0) {
+                newpdata |= 0xffff ^ pad->buttons.btns;
+                padsRead++;
+            }
+        }
+        if (usb_run[p]) {
+            ret = ds34usb_get_data(pad->port, (u8 *)&pad->buttons.btns);
+            if (ret != 0) {
+                newpdata |= 0xffff ^ pad->buttons.btns;
+                padsRead++;
+            }
         }
     }
 #endif
@@ -349,6 +373,37 @@ int readPads()
     }
 
     return rslt;
+}
+
+/** Cryo Loader: the right stick of the first pad that is in analog mode, -1..1 (0 when centred or digital). */
+void padGetRightStick(float *rx, float *ry)
+{
+    int i;
+    *rx = *ry = 0;
+    for (i = 0; i < pad_count; ++i) {
+        struct pad_data_t *pad = &pad_data[i];
+        int ok = (pad->state == PAD_STATE_STABLE || pad->state == PAD_STATE_FINDCTP1) && (pad->buttons.mode >> 4) == 0x07;
+#ifdef PADEMU
+        ok |= bt_run[pad->port & 1] || usb_run[pad->port & 1];
+#endif
+        if (!ok)
+            continue;
+        float x = (pad->buttons.rjoy_h - 127.5f) / 127.5f, y = (pad->buttons.rjoy_v - 127.5f) / 127.5f;
+        if (x * x + y * y > (*rx) * (*rx) + (*ry) * (*ry)) {
+            *rx = x;
+            *ry = y;
+        }
+    }
+}
+
+/** Cryo Loader: nonzero when any controller is plugged in. */
+int padAnyConnected(void)
+{
+    int i;
+    for (i = 0; i < pad_count; ++i)
+        if (pad_data[i].state == PAD_STATE_STABLE || pad_data[i].state == PAD_STATE_FINDCTP1)
+            return 1;
+    return 0;
 }
 
 /** Key getter with key repeats.

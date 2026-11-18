@@ -77,6 +77,7 @@ void rmEnd(void);
 
 /** Fills the parameters with the native screen width and height */
 void rmGetScreenExtentsNative(int *w, int *h);
+void rmGetRenderArea(float *xoff, float *yoff, int *w, int *h);
 
 /** Fills the parameters with the virtual (640x480) screen width and height */
 void rmGetScreenExtents(int *w, int *h);

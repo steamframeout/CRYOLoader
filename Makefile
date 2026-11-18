@@ -107,6 +107,14 @@ AUDIO_OBJS =	boot.o cancel.o confirm.o cursor.o message.o transition.o bd_connec
 
 MISC_OBJS =	icon_sys_A.o icon_sys_J.o icon_sys_C.o conf_theme_OPL.o
 
+# Cryo Loader front end (src/cryo) and what it embeds (cryo_res)
+CRYO_OBJS = cryo_base.o cryo_font.o cryo_icon.o cryo_parse.o cryo_theme.o cryo_nav.o cryo_input.o cryo_art.o cryo_fx.o \
+		cryo_ui.o cryo_lib.o cryo_detail.o cryo_boot.o cryo_panel.o cryo_settings.o cryo_dia.o cryo_ps2.o cryo_sound.o
+CRYO_FONTS = chakra400 chakra500 chakra600 michroma stmono plex400 plex500 plex600 plexmono
+CRYO_SOUNDS = cryo_move cryo_tick cryo_ok cryo_back cryo_open cryo_close cryo_tab cryo_key cryo_error cryo_launch \
+		cryo_boot_l cryo_boot_r
+CRYO_RES_OBJS = $(CRYO_FONTS:%=%_ttf.o) $(CRYO_SOUNDS:%=%_adp.o)
+
 TRANSLATIONS = Albanian Arabic Bulgarian Cebuano Croatian Czech Danish Dutch Filipino French \
 	Galician German Greek Hungarian Indonesian Italian Japanese Korean Laotian Persian Polish Portuguese \
 	Portuguese_BR Romana Russian Ryukyuan SChinese Serbian Spanish Swedish TChinese Turkish Vietnamese
@@ -217,9 +225,9 @@ EE_CFLAGS += -fsingle-precision-constant -DOPL_VERSION=\"$(OPL_VERSION)\"
 EE_CFLAGS += -Wno-format-truncation -Wno-stringop-truncation
 # Generate .d files to track header file dependencies of each object file
 EE_CFLAGS += -MMD -MP
-EE_OBJS += $(FRONTEND_OBJS) $(GFX_OBJS) $(AUDIO_OBJS) $(MISC_OBJS) $(EECORE_OBJS) $(IOP_OBJS)
+EE_OBJS += $(FRONTEND_OBJS) $(GFX_OBJS) $(AUDIO_OBJS) $(MISC_OBJS) $(EECORE_OBJS) $(IOP_OBJS) $(CRYO_OBJS) $(CRYO_RES_OBJS)
 EE_OBJS := $(EE_OBJS:%=$(EE_OBJS_DIR)%)
-EE_DEPS = $($(filter %.o,$(EE_OBJS)):%.o=%.d)
+EE_DEPS = $(patsubst %.o,%.d,$(filter %.o,$(EE_OBJS))) # (upstream had a typo here: header changes rebuilt nothing)
 
 # To help linking getting rid off unused functions and data
 EE_CFLAGS += -fdata-sections -ffunction-sections
@@ -773,6 +781,15 @@ $(EE_OBJS_DIR)%.o: $(EE_ASM_DIR)%.c | $(EE_OBJS_DIR)
 	$(EE_CC) $(EE_CFLAGS) $(EE_INCS) -c $< -o $@
 
 $(PNG_ASSETS:%=$(EE_ASM_DIR)%_png.c): $(EE_ASM_DIR)%_png.c: $(PNG_ASSETS_DIR)%.png | $(EE_ASM_DIR)
+	$(BIN2C) $< $@ $(@:$(EE_ASM_DIR)%.c=%)
+
+$(EE_OBJS_DIR)%.o: $(EE_SRC_DIR)cryo/%.c | $(EE_OBJS_DIR)
+	$(EE_CC) $(EE_CFLAGS) $(EE_INCS) -c $< -o $@
+
+$(CRYO_FONTS:%=$(EE_ASM_DIR)%_ttf.c): $(EE_ASM_DIR)%_ttf.c: cryo_res/fonts/%.ttf | $(EE_ASM_DIR)
+	$(BIN2C) $< $@ $(@:$(EE_ASM_DIR)%.c=%)
+
+$(CRYO_SOUNDS:%=$(EE_ASM_DIR)%_adp.c): $(EE_ASM_DIR)%_adp.c: cryo_res/audio/%.adp | $(EE_ASM_DIR)
 	$(BIN2C) $< $@ $(@:$(EE_ASM_DIR)%.c=%)
 
 endif

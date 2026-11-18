@@ -114,6 +114,8 @@ void menuHandleInputAppMenu();
 
 // Sets the selected item if it is found in the menu list
 void menuSetSelectedItem(menu_item_t *item);
+menu_list_t *menuGetList(void);
+void menuCryoSelect(menu_item_t *item, int id);
 
 void menuAddHint(menu_item_t *menu, int text_id, int icon_id);
 void menuRemoveHints(menu_item_t *menu);

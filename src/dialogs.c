@@ -1008,6 +1008,12 @@ struct UIItem diaAudioConfig[] = {
     {UI_STRING, CFG_DEFAULT_BGM_PATH, 1, 1, _STR_DEF_BGM_PATH_HINT, 0, 0, {.stringvalue = {"", "", NULL}}},
     {UI_BREAK},
 
+    // Cryo Loader: "label|description" (Cryo's settings split it; there is no language string for it)
+    {UI_LABEL, 0, 1, 1, -1, -40, 0, {.label = {"Boot sound file|An .adp file, like an OPL theme's boot.adp, such as mc0:/CRYO/boot.adp. Empty: Cryo's own.", -1}}},
+    {UI_SPACER},
+    {UI_STRING, CFG_BOOT_SND_PATH, 1, 1, -1, 0, 0, {.stringvalue = {"", "", NULL}}},
+    {UI_BREAK},
+
     // buttons
     {UI_OK, 0, 1, 1, -1, 0, 0, {.label = {NULL, _STR_OK}}},
     {UI_BREAK},

@@ -77,6 +77,7 @@ void applyConfig(int themeID, int langID, int skipDeviceRefresh);
 void menuDeferredUpdate(void *data);
 void moduleUpdateMenu(int mode, int themeChanged, int langChanged);
 void handleLwnbdSrv();
+void oplStartDevice(item_list_t *support);
 void deinit(int exception, int modeSelected);
 
 // Shutdown minimal services initiated for auto loading.
@@ -146,6 +147,7 @@ extern int gSFXVolume;
 extern int gBootSndVolume;
 extern int gBGMVolume;
 extern char gDefaultBGMPath[128];
+extern char gBootSndPath[128]; // Cryo Loader: a boot sound of your own (.adp), empty for Cryo's
 
 extern int gXSensitivity;
 extern int gYSensitivity;

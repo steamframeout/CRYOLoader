@@ -737,6 +737,28 @@ static void menuPrevPage()
     }
 }
 
+/* Cryo Loader: the device list, and selecting a game the way the old cursor did (for config, launch, rename, delete) */
+menu_list_t *menuGetList(void)
+{
+    return menu;
+}
+
+void menuCryoSelect(menu_item_t *item, int id)
+{
+    menu_list_t *it;
+    submenu_list_t *s;
+    for (it = menu; it; it = it->next)
+        if (it->item == item) {
+            selected_item = it;
+            break;
+        }
+    for (s = item->submenu; s; s = s->next)
+        if (s->item.id == id) {
+            item->current = s;
+            break;
+        }
+}
+
 void menuSetSelectedItem(menu_item_t *item)
 {
     menu_list_t *itm = menu;

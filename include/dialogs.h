@@ -62,6 +62,7 @@ enum UI_ITEMS {
     CFG_BOOT_SND_VOLUME,
     CFG_BGM_VOLUME,
     CFG_DEFAULT_BGM_PATH,
+    CFG_BOOT_SND_PATH, // Cryo Loader: a boot sound of your own
 
     CFG_XSENSITIVITY,
     CFG_YSENSITIVITY,

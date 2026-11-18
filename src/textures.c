@@ -1,5 +1,6 @@
 #include "include/opl.h"
 #include "include/textures.h"
+#include "include/cryo_opl.h"
 #include "include/util.h"
 #include "include/ioman.h"
 #include <png.h>
@@ -314,9 +315,21 @@ static void texReadPixels4(GSTEXTURE *texture, png_bytep *rowPointers, size_t si
         pixel[i] = (pixel[i] << 4) | (pixel[i] >> 4);
 }
 
+static void texClut8(GSTEXTURE *texture);
+
 static void texReadPixels8(GSTEXTURE *texture, png_bytep *rowPointers, size_t size)
 {
     unsigned char *pixel = (unsigned char *)texture->Mem;
+    int i;
+
+    texClut8(texture);
+
+    for (i = 0; i < texture->Height; i++)
+        memcpy(&pixel[i * texture->Width], rowPointers[i], texture->Width);
+}
+
+static void texClut8(GSTEXTURE *texture)
+{
     png_clut_t *clut = (png_clut_t *)texture->Clut;
     int i;
 
@@ -336,9 +349,6 @@ static void texReadPixels8(GSTEXTURE *texture, png_bytep *rowPointers, size_t si
             clut[i + 8] = tmp;
         }
     }
-
-    for (i = 0; i < texture->Height; i++)
-        memcpy(&pixel[i * texture->Width], rowPointers[i], texture->Width);
 }
 
 static void texReadPixels24(GSTEXTURE *texture, png_bytep *rowPointers, size_t size)
@@ -374,10 +384,58 @@ static void texReadPixels32(GSTEXTURE *texture, png_bytep *rowPointers, size_t s
     }
 }
 
+/* Cryo Loader: art loaded by one thread (texcache's I/O thread) is scaled down as it decodes */
+static int artFitUser, artFitThread = -1;
+
+void texSetArtFit(int userId)
+{
+    artFitUser = userId;
+    artFitThread = userId ? GetThreadId() : -1;
+}
+
+/* decodes a big 24/32-bit image row by row straight into the scaled-down texture: no full-size copy
+   in memory, and no second pass over it. 1 when done, 0 to take the normal path */
+static int texReadFit(GSTEXTURE *texture, png_structp pngPtr, png_infop infoPtr, int bpp)
+{
+    int nw, nh, row, rowBytes = png_get_rowbytes(pngPtr, infoPtr);
+    void *f;
+    u8 *buf;
+    if (artFitThread < 0 || artFitThread != GetThreadId() || png_get_interlace_type(pngPtr, infoPtr) != PNG_INTERLACE_NONE ||
+        rowBytes != texture->Width * bpp)
+        return 0;
+    buf = malloc(rowBytes);
+    if (!buf)
+        return 0;
+    f = cryoFitStart(artFitUser, texture->Width, texture->Height, bpp, &nw, &nh);
+    if (!f) {
+        free(buf);
+        return 0;
+    }
+    for (row = 0; row < texture->Height; row++) {
+        png_read_row(pngPtr, buf, NULL);
+        cryoFitRow(f, buf);
+    }
+    free(buf);
+    texture->Mem = (u32 *)cryoFitFinish(f);
+    texture->Width = nw;
+    texture->Height = nh;
+    if (bpp == 4) {
+        u8 *a = (u8 *)texture->Mem + 3, *end = (u8 *)texture->Mem + nw * nh * 4;
+        for (; a < end; a += 4)
+            *a >>= 1;
+    }
+    png_read_end(pngPtr, NULL);
+    return 1;
+}
+
 static void texReadData(GSTEXTURE *texture, png_structp pngPtr, png_infop infoPtr,
                         void (*texPngReadPixels)(GSTEXTURE *texture, png_bytep *rowPointers, size_t size))
 {
     int rowBytes = png_get_rowbytes(pngPtr, infoPtr);
+    if (texPngReadPixels == &texReadPixels24 || texPngReadPixels == &texReadPixels32) {
+        if (texReadFit(texture, pngPtr, infoPtr, texPngReadPixels == &texReadPixels24 ? 3 : 4))
+            return;
+    }
     size_t size = gsKit_texture_size_ee(texture->Width, texture->Height, texture->PSM);
     texture->Mem = memalign(128, size);
 
@@ -388,6 +446,30 @@ static void texReadData(GSTEXTURE *texture, png_structp pngPtr, png_infop infoPt
     }
 
     png_bytep *rowPointers = calloc(texture->Height, sizeof(png_bytep));
+    if (!rowPointers)
+        return;
+
+    /* Cryo Loader: 24-bit, 32-bit and 8-bit images have rows laid out exactly as the texture wants them,
+       so libpng writes straight into the texture: no second full-size buffer, and no copy that called
+       memcpy for every pixel (~0.5 us a pixel on the EE: most of a big cover's load time) */
+    {
+        int stride = texPngReadPixels == &texReadPixels24 ? texture->Width * 3 : texPngReadPixels == &texReadPixels32 ? texture->Width * 4 : texPngReadPixels == &texReadPixels8 ? texture->Width : 0;
+        if (stride && stride == rowBytes && (size_t)stride * texture->Height <= size) {
+            u8 *mem = (u8 *)texture->Mem;
+            for (int row = 0; row < texture->Height; row++)
+                rowPointers[row] = mem + row * stride;
+            png_read_image(pngPtr, rowPointers);
+            if (texPngReadPixels == &texReadPixels32) {
+                u8 *a = mem + 3, *end = mem + stride * texture->Height;
+                for (; a < end; a += 4)
+                    *a >>= 1;
+            } else if (texPngReadPixels == &texReadPixels8)
+                texClut8(texture);
+            free(rowPointers);
+            png_read_end(pngPtr, NULL);
+            return;
+        }
+    }
 
     png_bytep allRows = malloc(rowBytes * texture->Height);
     if (!allRows) {
@@ -426,6 +508,10 @@ static int texLoadAll(GSTEXTURE *texture, const char *filePath, int texId)
 
         int fileSize = lseek(fd, 0, SEEK_END);
         lseek(fd, 0, SEEK_SET);
+        if (fileSize <= 0) {
+            close(fd);
+            return ERR_BAD_FILE;
+        }
 
         pFileBuffer = malloc(fileSize);
         if (pFileBuffer == NULL) {
@@ -467,6 +553,15 @@ static int texLoadAll(GSTEXTURE *texture, const char *filePath, int texId)
 
     png_set_read_fn(pngPtr, readData, readFunction);
 
+    // Cryo Loader: cover art does not need its checksums verified (CRC-32 over the file, Adler-32 over
+    // every decoded byte): a damaged cover shows damaged, and the time goes to decoding instead
+    if (artFitThread >= 0 && artFitThread == GetThreadId()) {
+        png_set_crc_action(pngPtr, PNG_CRC_QUIET_USE, PNG_CRC_QUIET_USE);
+#ifdef PNG_IGNORE_ADLER32
+        png_set_option(pngPtr, PNG_IGNORE_ADLER32, PNG_OPTION_ON);
+#endif
+    }
+
     unsigned int sigRead = 0;
     png_set_sig_bytes(pngPtr, sigRead);
     png_read_info(pngPtr, infoPtr);
@@ -486,7 +581,10 @@ static int texLoadAll(GSTEXTURE *texture, const char *filePath, int texId)
             png_set_tRNS_to_alpha(pngPtr);
     }
 
-    png_set_filler(pngPtr, 0xff, PNG_FILLER_AFTER);
+    // Cryo Loader: RGB rows are read straight into the 24-bit texture (see texReadData); the filler byte
+    // was only ever dropped again
+    if (colorType != PNG_COLOR_TYPE_RGB)
+        png_set_filler(pngPtr, 0xff, PNG_FILLER_AFTER);
     png_read_update_info(pngPtr, infoPtr);
 
     void (*texPngReadPixels)(GSTEXTURE * texture, png_bytep * rowPointers, size_t size);
@@ -529,6 +627,11 @@ static int texLoadAll(GSTEXTURE *texture, const char *filePath, int texId)
     }
 
     if (texSizeValidate(texture->Width, texture->Height, texture->PSM) < 0) {
+        /* Cryo Loader: art too big for the GS (cover packs with 1000 x 1400 scans) is fine when it is
+           scaled down as it decodes: only a row of it is ever in memory */
+        if ((texture->PSM == GS_PSM_CT24 || texture->PSM == GS_PSM_CT32) && texture->Width <= 4096 && texture->Height <= 4096 &&
+            texReadFit(texture, pngPtr, infoPtr, texture->PSM == GS_PSM_CT24 ? 3 : 4))
+            return texEnd(pngPtr, infoPtr, pFileBuffer, 0);
         texFree(texture);
 
         return texEnd(pngPtr, infoPtr, pFileBuffer, ERR_BAD_DIMENSION);
@@ -560,12 +663,7 @@ int texDiscoverLoad(GSTEXTURE *texture, const char *path, int texId)
     else
         snprintf(filePath, sizeof(filePath), "%s.%s", path, "png");
 
-    int fd = open(filePath, O_RDONLY);
-    if (fd > 0) {
-        // File found, load it
-        close(fd);
-        return (texLoad(texture, filePath) >= 0) ? 0 : ERR_BAD_FILE;
-    }
-
-    return ERR_BAD_FILE;
+    // Cryo Loader: no separate open to see whether the file is there: texLoad's own open fails just the
+    // same, and each open is a round trip to the IOP plus a directory search (slow in a big ART folder)
+    return (texLoad(texture, filePath) >= 0) ? 0 : ERR_BAD_FILE;
 }

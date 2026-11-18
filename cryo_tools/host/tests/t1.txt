@@ -1,0 +1,17 @@
+rec boot 5600 400 0.5
+wait 5700
+wait 1500
+shot lib
+tap right
+wait 800
+shot lib2
+tap x
+wait 1200
+shot detail
+tap o
+wait 1000
+shot back
+tap sel
+wait 900
+shot list
+end

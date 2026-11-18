@@ -51,6 +51,10 @@ struct gui_update_t
 typedef void (*gui_callback_t)(void);
 
 extern int guiInactiveFrames;
+
+/* a frame of the GUI: takes the GUI lock, clears; ends with the flip and vsync */
+void guiStartFrame(void);
+void guiEndFrame(void);
 extern int guiFrameId;
 
 #define GUI_SCREEN_MAIN      0

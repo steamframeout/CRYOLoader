@@ -25,6 +25,7 @@ static const char *configFilenames[CONFIG_INDEX_COUNT] = {
     "conf_apps.cfg",
     "conf_network.cfg",
     "conf_game.cfg",
+    "conf_cryo.cfg",
 };
 
 static int strToColor(const char *string, unsigned char *color)

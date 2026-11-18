@@ -29,6 +29,8 @@ int getKey(int num);
 int getKeyOn(int num);
 int getKeyOff(int num);
 int getKeyPressed(int num);
+void padGetRightStick(float *rx, float *ry);
+int padAnyConnected(void);
 
 /** Sets the repetition delay for the specified button
  * @param button id (KEY_XXX values)

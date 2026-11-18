@@ -1,0 +1,6 @@
+host
+sndsim/sim
+sndsim/out/
+out/
+*.wav
+*.png

@@ -9,6 +9,7 @@
 
 #include "include/opl.h"
 #include "include/renderman.h"
+#include "include/cryo_opl.h"
 #include "include/ioman.h"
 
 // Allocateable space in vram, as indicated in GsKit's code
@@ -170,6 +171,14 @@ void rmInit()
 
 int rmSetMode(int force)
 {
+    if (gCryo) {
+        /* Cryo Loader draws for 640x448 at 60 Hz, 4:3: NTSC 480i, or 480p for component cables and HDMI
+           adapters (no interlace: sharp text, nothing shimmers while it moves) */
+        if (gVMode != 3)
+            gVMode = 2; // NTSC@60Hz
+        gWideScreen = 0;
+    }
+
     if (gVMode < RM_VMODE_AUTO || gVMode >= NUM_RM_VMODES)
         gVMode = RM_VMODE_AUTO;
 
@@ -246,6 +255,15 @@ int rmSetMode(int force)
     rmSetAspectRatio((gWideScreen == 0) ? RM_ARATIO_4_3 : RM_ARATIO_16_9);
 
     return changed;
+}
+
+/* Cryo Loader: where the 640x480 layout goes on the frame buffer (offsets include the half-pixel shift) */
+void rmGetRenderArea(float *xoff, float *yoff, int *w, int *h)
+{
+    *xoff = fRenderXOff;
+    *yoff = fRenderYOff;
+    *w = iDisplayWidth;
+    *h = iDisplayHeight;
 }
 
 void rmGetScreenExtentsNative(int *w, int *h)
