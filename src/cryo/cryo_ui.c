@@ -703,6 +703,13 @@ static void draw_comp(int c, float x, float yc, float w, int chrome_on, int in_s
         case COMP_COUNT: {
             float p = U.count_t0 ? canim_p(U.count_t0, cdur(220), 0, E_OUT) : 1;
             count_text(b, sizeof(b));
+            {
+                /* covers pass under the count: a soft shadow keeps it readable (it stays put while the
+                   digits change) */
+                float tw = cf_width(F_MONO_M, b, .96f), lh = cf_line(F_MONO_M);
+                /* one wide, very gradual patch: strongest under the digits, gone well before its edge */
+                cfx_shadow(x + tw / 2, yc + 1, tw * .5f + 46, lh * .5f + 24, ccol_alpha(T.bg, .58f));
+            }
             cx_push(0, U.count_dir * 8 * (1 - p), 1, 0, 0, p);
             cf_text(F_MONO_M, x, yc - cf_line(F_MONO_M) / 2, b, T.fg, .96f);
             cx_pop();

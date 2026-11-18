@@ -48,6 +48,34 @@ void cfx_glow(float cx, float cy, float rx, float ry, ccol c)
     cg_blend(0);
 }
 
+/* a soft dark patch behind small text that sits over pictures (covers the same way, never adds light).
+   Its own texture: a bell that thins out long before its edge, so no outline of the patch can be seen */
+static ctex *shade_tex;
+
+void cfx_shadow(float cx, float cy, float rx, float ry, ccol c)
+{
+    if (!shade_tex) {
+        uint8_t *b = (uint8_t *)malloc(GLOW_N * GLOW_N);
+        int x, y;
+        if (!b)
+            return;
+        shade_tex = cg_alpha_tex(GLOW_N, GLOW_N);
+        if (shade_tex) {
+            for (y = 0; y < GLOW_N; y++)
+                for (x = 0; x < GLOW_N; x++) {
+                    float dx = (x + .5f) / (GLOW_N / 2) - 1, dy = (y + .5f) / (GLOW_N / 2) - 1, d = dx * dx + dy * dy, a;
+                    a = d >= 1 ? 0 : (1 - d) * (1 - d) * (1 - d);
+                    b[y * GLOW_N + x] = (uint8_t)(a * 255 + .5f);
+                }
+            cg_alpha_put(shade_tex, 0, 0, GLOW_N, GLOW_N, b, GLOW_N);
+        }
+        free(b);
+    }
+    if (!shade_tex || !(c >> 24) || rx <= 0 || ry <= 0)
+        return;
+    cd_sprite(shade_tex, cx - rx, cy - ry, rx * 2, ry * 2, 0, 0, GLOW_N, GLOW_N, c, 1);
+}
+
 /* a slow breath, 0..1 */
 static float breathe(float period_ms, float phase)
 {

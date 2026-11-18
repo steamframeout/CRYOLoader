@@ -284,6 +284,7 @@ void cd_quad_tex(ctex *t, const float *xy, float u0, float v0, float u1, float v
 void cd_quad_tex2(ctex *t, const float *xy, float u0, float v0, float u1, float v1, ccol top, ccol bottom);
 /* ---- effects of fx=plus themes (cryo_fx.c) ---- */
 void cfx_glow(float cx, float cy, float rx, float ry, ccol c);
+void cfx_shadow(float cx, float cy, float rx, float ry, ccol c);
 void cfx_bg(float k); /* k: 0..1, how present it is (dimmed behind the game page) */
 void cfx_bevel(float x, float y, float w, float h, float r, float t, ccol fill);
 void cfx_cursor_under(float x, float y, float w, float h, float a);
