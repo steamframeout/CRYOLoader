@@ -278,6 +278,25 @@ static cglyph *glyph_get(int fi, int cp)
     }
 }
 
+/* Draws the letters the library is about to need (game titles and IDs) a couple a frame while the boot
+   screen is up. Each one costs a millisecond or two the first time it is drawn; left to the library,
+   the first few titles scrolled to paid for them in dropped frames. 1 while there is more to do */
+int cf_prewarm(void)
+{
+    static const char set[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 -_.:'&!/";
+    static const int fs[] = {F_D_L, F_MONO_M, F_M};
+    static int at;
+    static uint32_t gen;
+    int n = (int)(sizeof(set) - 1), total = n * (int)(sizeof(fs) / sizeof(fs[0])), k;
+    if (gen != atlas_gen) {
+        gen = atlas_gen;
+        at = 0;
+    }
+    for (k = 0; k < 2 && at < total; k++, at++)
+        glyph_get(fs[at / n], (unsigned char)set[at % n]);
+    return at < total;
+}
+
 float cf_size(int f) { return fonts[f].px; }
 float cf_line(int f) { return floorf(fonts[f].px * 1.3f * 10 + 0.5f) / 10; }
 

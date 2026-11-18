@@ -1157,6 +1157,32 @@ static void draw_under(void)
         cryo_draw_main();
 }
 
+/* inserts a character at the caret / deletes the one before it. 1 if the text changed */
+static int osk_put(char *buf, int *cur, int maxlen, char ch)
+{
+    int len = (int)strlen(buf);
+    if (len >= maxlen - 1)
+        return 0;
+    memmove(buf + *cur + 1, buf + *cur, len - *cur + 1);
+    buf[(*cur)++] = ch;
+    return 1;
+}
+
+static int osk_del(char *buf, int *cur)
+{
+    int len = (int)strlen(buf), from = *cur;
+    if (from <= 0)
+        return 0;
+    do
+        from--;
+    while (from > 0 && ((unsigned char)buf[from] & 0xC0) == 0x80);
+    memmove(buf + from, buf + *cur, len - *cur + 1);
+    *cur = from;
+    return 1;
+}
+#define OSK_PUT(ch) osk_put(buf, &cur, maxlen, ch)
+#define OSK_DEL() osk_del(buf, &cur)
+
 int cosk_run(char *text, int maxlen, int password, const char *title, int numeric)
 {
     static const char *const L0[4] = {"1234567890", "qwertyuiop", "asdfghjkl-", "zxcvbnm._/"};
@@ -1165,11 +1191,13 @@ int cosk_run(char *text, int maxlen, int password, const char *title, int numeri
     char buf[260];
     cnav_t nav;
     int shift = 0, a, done = 0, ok = 0, cols = numeric ? 3 : 10, i, j;
+    int cur, view = 0; /* the caret (a byte offset, L1/R1 move it) and the first character in view */
     uint32_t t0 = cp_ms(), tc = 0;
     float sheet_h, sy0;
     cs_copy(buf, text, sizeof(buf));
     if (maxlen > (int)sizeof(buf) - 1)
         maxlen = sizeof(buf) - 1;
+    cur = (int)strlen(buf);
     memset(&nav, 0, sizeof(nav));
     nav.cur = 1;
     /* rows: value line, 4 key rows, 1 command row, hints */
@@ -1211,12 +1239,29 @@ int cosk_run(char *text, int maxlen, int password, const char *title, int numeri
             if (password)
                 for (i = 0; shown[i]; i++)
                     shown[i] = '*';
-            /* the end of the text stays in view, like the prototype's rtl input */
-            while (*s && cf_width(F_MONO_M, s, 0) > bw - 28)
-                s++;
-            tw = cf_text(F_MONO_M, bx + 11, y + 18 - cf_line(F_MONO_M) / 2, s, T.fg, 0);
+            /* the caret stays in view: the text scrolls under the box as it moves */
+            {
+                char part[260];
+                if (view > cur)
+                    view = cur;
+                for (;;) {
+                    cs_copy(part, shown + view, sizeof(part));
+                    part[cur - view] = 0;
+                    if (view >= cur || cf_width(F_MONO_M, part, 0) <= bw - 28)
+                        break;
+                    view++;
+                }
+                s = shown + view;
+                /* and no more text than fits is drawn */
+                cs_copy(part, s, sizeof(part));
+                while (part[0] && cf_width(F_MONO_M, part, 0) > bw - 20)
+                    part[strlen(part) - 1] = 0;
+                cf_text(F_MONO_M, bx + 11, y + 18 - cf_line(F_MONO_M) / 2, part, T.fg, 0);
+                part[CMIN(cur - view, (int)strlen(part))] = 0;
+                tw = cf_width(F_MONO_M, part, 0);
+            }
             if ((g_now / 500) % 2 == 0 || !canim())
-                cd_rect(bx + 11 + tw + 2, y + 9, 2, 18, T.accent);
+                cd_rect(bx + 11 + tw + 1, y + 9, 2, 18, T.accent);
             y += 36 + 10;
             for (j = 0; j < 4; j++) {
                 const char *row = numeric ? N0[j] : (shift ? L1[j] : L0[j]);
@@ -1240,7 +1285,7 @@ int cosk_run(char *text, int maxlen, int password, const char *title, int numeri
                     cmd[nc] = "Done";
                     span[nc++] = 2;
                 } else {
-                    cmd[nc] = shift ? "abc" : "Shift";
+                    cmd[nc] = shift ? "abc" : "Caps";
                     span[nc++] = 2;
                     cmd[nc] = "Space";
                     span[nc++] = 4;
@@ -1260,24 +1305,34 @@ int cosk_run(char *text, int maxlen, int password, const char *title, int numeri
                 y = ky + 36 + 10;
             }
             {
-                float x = 16;
-                ci_draw(g_confirm_circle ? I_G_CIRCLE : I_G_CROSS, x, y + cf_line(F_S) / 2 - 10, 20, T.dim, T.accent);
-                x += 28;
-                x += cf_text(F_S, x, y, "Type", T.dim, 0) + 14;
-                draw_kb(x, y + cf_line(F_S) / 2, "START", T.dim);
-                x += kb_w("START") + 8;
-                x += cf_text(F_S, x, y, "Done", T.dim, 0) + 14;
-                ci_draw(I_G_SQUARE, x, y + cf_line(F_S) / 2 - 10, 20, T.dim, T.accent);
-                x += 28;
-                x += cf_text(F_S, x, y, "Delete", T.dim, 0) + 14;
+                float x = 16, hy = y + cf_line(F_S) / 2;
+                ci_draw(g_confirm_circle ? I_G_CIRCLE : I_G_CROSS, x, hy - 10, 20, T.dim, T.accent);
+                x += 26;
+                x += cf_text(F_S, x, y, "Type", T.dim, 0) + 10;
+                ci_draw(I_G_SQUARE, x, hy - 10, 20, T.dim, T.accent);
+                x += 26;
+                x += cf_text(F_S, x, y, "Delete", T.dim, 0) + 10;
                 if (!numeric) {
-                    ci_draw(I_G_TRIANGLE, x, y + cf_line(F_S) / 2 - 10, 20, T.dim, T.accent);
-                    x += 28;
-                    x += cf_text(F_S, x, y, "Space", T.dim, 0) + 14;
+                    ci_draw(I_G_TRIANGLE, x, hy - 10, 20, T.dim, T.accent);
+                    x += 26;
+                    x += cf_text(F_S, x, y, "Space", T.dim, 0) + 10;
+                    draw_kb(x, hy, "SELECT", T.dim);
+                    x += kb_w("SELECT") + 6;
+                    x += cf_text(F_S, x, y, "Caps", T.dim, 0) + 10;
                 }
-                ci_draw(g_confirm_circle ? I_G_CROSS : I_G_CIRCLE, x, y + cf_line(F_S) / 2 - 10, 20, T.dim, T.accent);
-                x += 28;
-                cf_text(F_S, x, y, "Cancel", T.dim, 0);
+                draw_kb(x, hy, "L1", T.dim);
+                x += kb_w("L1") + 4;
+                draw_kb(x, hy, "R1", T.dim);
+                x += kb_w("R1") + 6;
+                x += cf_text(F_S, x, y, "Cursor", T.dim, 0) + 10;
+                draw_kb(x, hy, "START", T.dim);
+                x += kb_w("START") + 6;
+                x += cf_text(F_S, x, y, "Done", T.dim, 0) + 10;
+                if (numeric) { /* the full keyboard's row is full; its cancel button is the usual one */
+                    ci_draw(g_confirm_circle ? I_G_CROSS : I_G_CIRCLE, x, hy - 10, 20, T.dim, T.accent);
+                    x += 26;
+                    cf_text(F_S, x, y, "Cancel", T.dim, 0);
+                }
             }
         }
         cx_pop();
@@ -1299,17 +1354,26 @@ int cosk_run(char *text, int maxlen, int password, const char *title, int numeri
                     csnd(CS_MOVE);
                 else
                     csnd(CS_TICK);
+            } else if (a == A_L1 || a == A_R1) {
+                /* the caret, a whole character at a time */
+                if (a == A_L1 && cur > 0) {
+                    do
+                        cur--;
+                    while (cur > 0 && ((unsigned char)buf[cur] & 0xC0) == 0x80);
+                    csnd(CS_MOVE);
+                } else if (a == A_R1 && cur < len) {
+                    do
+                        cur++;
+                    while (cur < len && ((unsigned char)buf[cur] & 0xC0) == 0x80);
+                    csnd(CS_MOVE);
+                } else
+                    csnd(CS_TICK);
             } else if (a == A_SQUARE) {
-                if (len) {
-                    buf[len - 1] = 0;
+                if (OSK_DEL())
                     csnd(CS_KEY);
-                }
             } else if (a == A_TRIANGLE && !numeric) {
-                if (len < maxlen - 1) {
-                    buf[len] = ' ';
-                    buf[len + 1] = 0;
+                if (OSK_PUT(' '))
                     csnd(CS_KEY);
-                }
             } else if (a == A_VIEW && !numeric) {
                 shift = !shift;
                 csnd(CS_TICK);
@@ -1331,14 +1395,10 @@ int cosk_run(char *text, int maxlen, int password, const char *title, int numeri
                         shift = !shift;
                         csnd(CS_TICK);
                     } else if (k == 1) {
-                        if (len < maxlen - 1) {
-                            buf[len] = ' ';
-                            buf[len + 1] = 0;
-                        }
+                        OSK_PUT(' ');
                         csnd(CS_KEY);
                     } else if (k == 2) {
-                        if (len)
-                            buf[len - 1] = 0;
+                        OSK_DEL();
                         csnd(CS_KEY);
                     } else {
                         ok = 1;
@@ -1349,10 +1409,8 @@ int cosk_run(char *text, int maxlen, int password, const char *title, int numeri
                 } else {
                     int jr = (int)(c - 1) / 16, ic = (int)(c - 1) % 16;
                     const char *row = numeric ? N0[jr] : (shift ? L1[jr] : L0[jr]);
-                    if (ic < (int)strlen(row) && len < maxlen - 1) {
-                        buf[len] = row[ic];
-                        buf[len + 1] = 0;
-                    }
+                    if (ic < (int)strlen(row))
+                        OSK_PUT(row[ic]);
                     csnd(CS_KEY);
                 }
             }

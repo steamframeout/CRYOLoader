@@ -16,6 +16,10 @@ typedef struct
     int lastUsed;
 
     int UID;
+
+    // Cryo Loader: the frame it was last asked for while its load was still queued (loads nobody is
+    // waiting for any more are skipped)
+    int wanted;
 } cache_entry_t;
 
 

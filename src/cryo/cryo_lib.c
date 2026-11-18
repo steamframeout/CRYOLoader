@@ -334,19 +334,15 @@ static void caption(cviewst *v, float cw, float ch)
     citem *it;
     char title[128], sub[96];
     float y = cover_cy() + ch / 2 + 18, p = 1, dx = 0, lh = 27.5f;
-    int lines, k;
-    const char *reg = NULL, *ext;
+    int lines;
+    const char *ext;
     if (v->sel < 0 || v->sel >= v->list->n)
         return;
     it = &v->list->v[v->sel];
     cui_title_case(it->p.title, title, sizeof(title));
-    for (k = 0; k < it->p.ntags; k++)
-        if (it->p.tags[k].type == T_REGION) {
-            reg = it->p.tags[k].label;
-            break;
-        }
+    /* under the title: the game's ID only */
     ext = cd_ext(v->dev, it->idx);
-    snprintf(sub, sizeof(sub), "%s%s%s", it->p.id[0] ? it->p.id : (ext && !strcmp(ext, "ELF") ? "Homebrew" : (ext ? ext : "")), reg ? " \xC2\xB7 " : "", reg ? reg : "");
+    snprintf(sub, sizeof(sub), "%s", it->p.id[0] ? it->p.id : (ext && !strcmp(ext, "ELF") ? "Homebrew" : (ext ? ext : "")));
     if (v->cap_t0) {
         p = canim_p(v->cap_t0, cdur(260), 0, E_OUT);
         dx = v->cap_dir * 16 * (1 - p);

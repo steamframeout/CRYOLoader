@@ -1585,7 +1585,7 @@ static void cryoMainLoop(void)
 #undef FT_STEP
 
         /* theme music starts once the boot sound has finished (or faded) */
-        if (!bgmStarted && !sfxCryoBootAudible()) {
+        if (!bgmStarted && !cryoBootBusy() && cryoBootScreenDone()) {
             bgmStarted = 1;
             if (gEnableBGM && !isBgmPlaying()) {
                 audioSetVolume(); /* the music volume from the settings */

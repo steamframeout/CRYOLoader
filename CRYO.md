@@ -35,7 +35,8 @@ game's own settings are written when you close its settings page.
   16:9 option is hidden; screen position and overscan still work.
 - **Text entry uses the Cryo keyboard**, which replaces OPL's. It is what you type network
   addresses, the share name, user name, password and the parental lock password with.
-  ✕ types, □ deletes, △ adds a space, START finishes, ○ cancels.
+  ✕ types, □ deletes, △ adds a space, SELECT switches capitals, L1/R1 move the text cursor,
+  START finishes, ○ cancels.
 - **Boot sound**: Cryo's own, made by `cryo_res/src/make_boot.py` (synthesised, stereo, 6.4 s
   with its fade-out built in), or your own file (Settings › Audio › Boot sound file, below).
   Skipping the boot screen fades it out over 1.2 s; choosing a game fades it over 0.4 s. OPL's
@@ -45,8 +46,11 @@ game's own settings are written when you close its settings page.
   such as `mc0:/CRYO/boot.adp`. Empty, missing or not readable: Cryo's own plays. The file is read
   when the sounds load at start-up, so keep it on the memory card. **Background music** is OPL's:
   an `.ogg` file set as "Music file" on the same page.
-- **Auto start last played** (Settings › General, OPL's option): after the boot screen the game
-  moves to the middle and a countdown shows under it. Any button stops it.
+- **No auto start.** OPL's "auto-start last game" is switched off and hidden in Cryo.
+- **First-start defaults**: cover art, sound effects, boot sound, rename and delete, and "remember
+  last game" are on; menu sounds are Soft at pitch 0.4.
+- **Cover loading**: covers load while you scroll, further ahead in the direction of travel, and a
+  load that was scrolled past before its turn is skipped.
 - **Parental lock**: as in OPL. Settings ask for the password once, until they are saved.
 - Holding START while the ELF starts skips loading OPL's settings (OPL's own escape hatch).
 - **Start-up trace**: hold SELECT while the ELF starts. A row of 8 squares at the bottom left

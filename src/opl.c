@@ -966,6 +966,8 @@ static void _loadConfig()
             configGetStrCopy(configOPL, CONFIG_OPL_ETH_PREFIX, gETHPrefix, sizeof(gETHPrefix));
             configGetInt(configOPL, CONFIG_OPL_REMEMBER_LAST, &gRememberLastPlayed);
             configGetInt(configOPL, CONFIG_OPL_AUTOSTART_LAST, &gAutoStartLastPlayed);
+            if (gCryo)
+                gAutoStartLastPlayed = 0; // Cryo Loader has no auto start (an old OPL config may ask for it)
             configGetInt(configOPL, CONFIG_OPL_BDM_MODE, &gBDMStartMode);
             configGetInt(configOPL, CONFIG_OPL_HDD_MODE, &gHDDStartMode);
             configGetInt(configOPL, CONFIG_OPL_ETH_MODE, &gETHStartMode);
@@ -1777,6 +1779,15 @@ static void setDefaults(void)
     gBGMVolume = 70;
     gDefaultBGMPath[0] = '\0';
     gBootSndPath[0] = '\0';
+    if (gCryo) {
+        /* Cryo Loader's own defaults: what a first start should look and sound like */
+        gEnableArt = 1;
+        gEnableSFX = 1;
+        gEnableBootSND = 1;
+        gEnableWrite = 1;
+        gRememberLastPlayed = 1;
+        gAutoStartLastPlayed = 0; /* and no auto start in Cryo at all (see _loadConfig) */
+    }
     gXSensitivity = 1;
     gYSensitivity = 1;
 

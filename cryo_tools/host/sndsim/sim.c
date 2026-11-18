@@ -459,6 +459,7 @@ static void run_until(uint64_t t)
 
 /* the console: the boot sound alone while it plays */
 int cryoBootBusy(void) { return sfxCryoBootAudible(); }
+int cryoBootScreenDone(void) { return 1; }
 
 int main(int argc, char **argv)
 {

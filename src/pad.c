@@ -245,6 +245,24 @@ static u32 readLeftJoy(struct pad_data_t *pad, u32 pdata)
 /* Cryo Loader: which ports have a DualShock 3/4 running over USB or Bluetooth (their sticks arrive in
    pad->buttons although the port itself may be empty) */
 static int bt_run[2], usb_run[2];
+static volatile int pademuPolling;
+static u32 pademuPolled;
+
+static void pademuPoll(void)
+{
+    int p;
+    for (p = 0; p < 2; p++) {
+        int bt = (ds34bt_get_status(p) & DS34BT_STATE_RUNNING) != 0;
+        int usb = (ds34usb_get_status(p) & DS34USB_STATE_RUNNING) != 0;
+        if (bt && !bt_run[p])
+            ds34bt_set_rumble(p, 0, 0);
+        if (usb && !usb_run[p])
+            ds34usb_set_rumble(p, 0, 0);
+        bt_run[p] = bt;
+        usb_run[p] = usb;
+    }
+    pademuPolling = 0;
+}
 #endif
 
 static int readPad(struct pad_data_t *pad)
@@ -279,24 +297,20 @@ static int readPad(struct pad_data_t *pad)
 #ifdef PADEMU
     {
         /* Each of these is a call to the IOP that waits for its answer, and the IOP is often busy with the
-           disk: asking every frame for the status of controllers that are not there cost ~0.3 ms a frame,
-           and several ms while covers load. The status is asked twice a second; the buttons of a running
-           controller every frame; rumble is stopped once, when it starts running. (cpu_ticks wraps every
-           ~15 s; the unsigned difference then just asks early) */
-        static u32 polled[2];
-        int p = pad->port & 1, bt, usb;
+           disk (53 ms was measured while covers load: three frames lost, twice a second). So the status
+           of USB and Bluetooth controllers is asked on the I/O thread, twice a second; this thread only
+           reads the buttons of one that is running, and never while that poll is under way (they share
+           the RPC client). Rumble is stopped once, when a controller starts running. */
+        int p = pad->port & 1;
         u32 now = cpu_ticks() / CLOCKS_PER_MILISEC;
-        if (!polled[p] || now - polled[p] >= 500) {
-            polled[p] = now ? now : 1;
-            bt = (ds34bt_get_status(pad->port) & DS34BT_STATE_RUNNING) != 0;
-            usb = (ds34usb_get_status(pad->port) & DS34USB_STATE_RUNNING) != 0;
-            if (bt && !bt_run[p])
-                ds34bt_set_rumble(pad->port, 0, 0);
-            if (usb && !usb_run[p])
-                ds34usb_set_rumble(pad->port, 0, 0);
-            bt_run[p] = bt;
-            usb_run[p] = usb;
+        if (p == 0 && !pademuPolling && (!pademuPolled || now - pademuPolled >= 500)) {
+            pademuPolled = now ? now : 1;
+            pademuPolling = 1;
+            if (ioPutRequest(IO_CUSTOM_SIMPLEACTION, &pademuPoll) < 0)
+                pademuPolling = 0;
         }
+        if (pademuPolling)
+            goto pademu_done;
         if (bt_run[p]) {
             ret = ds34bt_get_data(pad->port, (u8 *)&pad->buttons.btns);
             if (ret != 0) {
@@ -311,6 +325,7 @@ static int readPad(struct pad_data_t *pad)
                 padsRead++;
             }
         }
+    pademu_done:;
     }
 #endif
     if (padsRead > 0) {

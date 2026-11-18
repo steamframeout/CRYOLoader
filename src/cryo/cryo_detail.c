@@ -188,8 +188,6 @@ static void sub_line(char *b, int n)
         snprintf(b + strlen(b), n - strlen(b), "%s", D.info.developer);
     if (D.info.release[0])
         snprintf(b + strlen(b), n - strlen(b), "%s%s", b[0] ? " \xC2\xB7 " : "", D.info.release);
-    if (D.info.genre[0])
-        snprintf(b + strlen(b), n - strlen(b), "%s%s", b[0] ? " \xC2\xB7 " : "", D.info.genre);
 }
 
 static void measure(const clay *l, cblocks *B)
@@ -481,7 +479,7 @@ static void draw_info(const clay *l, const cblocks *B, float off, int reg)
     enter_push(kid++, x + w / 2, top + B->y[B->idx_h2] + B->h[B->idx_h2] / 2);
     cf_wrap_balance(F_D_L, x, top + B->y[B->idx_h2], w, 28.6f, 0, title, T.fg, .66f, 0, 1);
     cx_pop();
-    /* developer, year, genre */
+    /* developer, year */
     enter_push(kid++, x + w / 2, top + 4);
     if (B->idx_sub >= 0) {
         sub_line(b, sizeof(b));

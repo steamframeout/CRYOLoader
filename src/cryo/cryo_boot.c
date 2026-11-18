@@ -86,6 +86,8 @@ void cboot_draw(void)
     }
     if (el < 100)
         cfx_prepare();
+    if (U.screen == SC_BOOT)
+        cf_prewarm();
     /* the backdrop fades out unscaled: the library's own (the same landscape) shows through it */
     cx_push(0, 0, 1, 0, 0, out_a);
     cd_rect(0, 0, 640, 480, T.bg);
@@ -233,7 +235,6 @@ void claunch_open(void)
     /* the boot sound may still be ringing out (auto-start, or a quick pick): it makes way for the launch sound */
     cp_sound_fade(CF_BOOT, 400);
     csnd(CS_LAUNCH);
-    cui_set_played(cd_name(dev, it->idx), cp_now());
     cui_push(L_LAUNCH, 320);
     U.nav[L_LAUNCH].cur = N_LBACK;
 }
@@ -254,9 +255,12 @@ static void end_launch(void)
     LA.tc = g_now;
     if (cui_top() == L_LAUNCH)
         cui_pop();
-    cui_rebuild(1);
-    U.lv.list = U.list;
-    cdet_refresh();
+    if (LA.launched) {
+        /* it was tried and failed: "last played" changed, so the order may have */
+        cui_rebuild(1);
+        U.lv.list = U.list;
+        cdet_refresh();
+    }
 }
 
 void claunch_input(int a)
@@ -286,6 +290,8 @@ void claunch_frame(void)
     if (LA.quiet && (float)(int32_t)(g_now - LA.t0) >= cdur(LINE0_MS + LA.n * LINE_MS) + FADE_MS) {
         /* hand over. Settings and "last played" go to the memory card first */
         LA.launched = 1;
+        /* only now: cancelling leaves "last played" (and so the list and its covers) alone */
+        cui_set_played(cd_name(LA.dev, LA.idx), cp_now());
         cc_save();
         cd_launch(LA.dev, LA.idx, LA.err, sizeof(LA.err));
         /* still here: it did not start */

@@ -335,7 +335,8 @@ float cf_text(int f, float x, float y, const char *s, ccol c, float spacing);
 float cf_width(int f, const char *s, float spacing);
 float cf_width_n(int f, const char *s, int n, float spacing);
 float cf_line(int f);   /* line height used for layout (CSS normal-ish: 1.3 em) */
-float cf_size(int f);   /* em size in px */
+float cf_size(int f);
+int cf_prewarm(void); /* boot screen: gets the library's letters ready, a couple a frame */   /* em size in px */
 float cf_ascent(int f); /* baseline offset from the top of a line box */
 /* text in a box: align 0 left 1 centre 2 right; y is the top of the line box (line height lh) */
 float cf_text_box(int f, float x, float y, float w, int align, const char *s, ccol c, float spacing);

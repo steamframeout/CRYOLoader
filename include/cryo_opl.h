@@ -38,6 +38,7 @@ void texSetArtFit(int userId);
 int cryoSfxInit(void);
 void cryoSfxPlayOpl(int id);
 int cryoBootBusy(void);
+int cryoBootScreenDone(void);
 void sfxCryoBootChanged(void); /* the boot sound file setting changed: load it now (cryo_sound.c) */ /* the boot sound is playing, or waiting to (cryo_ps2.c) */
 void cryoSfxEnd(void);
 void cryoSfxLevels(void);

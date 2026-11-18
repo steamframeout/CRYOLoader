@@ -697,7 +697,7 @@ void cryoSfxPlayOpl(int id)
     static const signed char map[SFX_COUNT] = {-1, 3, 2, 0, 4, 6, 2, 3};
     if (id == SFX_BOOT)
         sfxCryoPlayBoot();
-    else if (cryoBootBusy())
+    else if (cryoBootBusy() || !cryoBootScreenDone())
         return; /* the drive mounting while the boot sound plays (or is about to): it stays alone */
     else if (id > 0 && id < SFX_COUNT)
         sfxCryoPlay(map[id]);

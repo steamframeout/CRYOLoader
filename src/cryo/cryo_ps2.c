@@ -27,6 +27,7 @@
 #include "cryo_ui.h"
 
 #include <osd_config.h>
+#include <libcdvd.h>
 #include <time.h>
 #include <stdarg.h>
 #include <malloc.h>
@@ -609,6 +610,7 @@ uint32_t cp_ms(void)
     return (uint32_t)((u64)clock() * 1000 / CLOCKS_PER_SEC);
 }
 
+static int cryo_up;         /* fonts, theme and screens are ready */
 static uint32_t last_press; /* when a button last went down (see cp_sound_) */
 
 void cp_pad(cpad_t *p)
@@ -629,7 +631,7 @@ void cp_pad(cpad_t *p)
     padGetRightStick(&p->rx, &p->ry);
     p->connected = padAnyConnected();
     {
-        static uint32_t prev;
+        static uint32_t prev = 0xFFFFFFFFu; /* a button still held from the launcher is not a press */
         if (p->held & ~prev)
             last_press = cp_ms(); /* see cp_sound_ */
         prev = p->held;
@@ -655,6 +657,12 @@ void cp_sound(int id, int mode, float pitch)
    load, no other sound plays unless a button was just pressed: the user's own moves still click, but
    nothing the program does by itself (auto start counting down, a device turning up, OPL's own
    sounds) is heard over it. The launch sound is the exception: the boot sound fades out for it. */
+/* the boot screen has ended (background music waits for it, and for the boot sound) */
+int cryoBootScreenDone(void)
+{
+    return cryo_up && U.screen != SC_BOOT;
+}
+
 int cryoBootBusy(void)
 {
     return boot_pending || sfxCryoBootAudible();
@@ -672,8 +680,15 @@ static void cp_sound_(int id, int mode, float pitch)
         }
         return;
     }
-    if (id != CS_LAUNCH && cryoBootBusy() && !(last_press && cp_ms() - last_press < 400))
+    /* nothing at all while the boot screen is up; after it, only the user's own moves until the boot
+       sound is over */
+    if (id != CS_LAUNCH && (U.screen == SC_BOOT || (cryoBootBusy() && !(last_press && cp_ms() - last_press < 400)))) {
+        if (gCryoTrace)
+            cp_debug("sound %d held back (boot)", id);
         return;
+    }
+    if (gCryoTrace && cp_ms() < 30000)
+        cp_debug("sound %d mode %d screen %d", id, mode, U.screen);
     /* the menu sounds were recorded at pitch 0.4; soft is a little lower and quieter */
     sfxCryoSetup(pitch / 0.4f * (mode == 1 ? 0.8f : 1.0f), mode);
     if (mode != 2)
@@ -688,25 +703,49 @@ void cp_sound_fade(int what, int ms)
         FT_US(ft_snd, sfxCryoFadeAll(ms));
 }
 
-static void local_time(struct tm *out)
+/* ---- the clock ----
+   Read from the console's own clock chip the way the PS2 browser does (it keeps Japan time; the system
+   settings give the time zone and summer time), not from the C library's time(): that is set once
+   before OPL has reset the IOP, and came out wrong when started from a launcher. The chip is asked on
+   the I/O thread (a call to the IOP that can wait behind disk reads) once a minute; in between, the
+   time is counted on from the last answer. */
+static volatile int rtc_ok, rtc_busy;
+static volatile uint32_t rtc_secs, rtc_at; /* seconds into the local day, and when (cp_ms) */
+
+static int bcd(u8 v) { return (v >> 4) * 10 + (v & 15); }
+
+static void rtc_read(void)
 {
-    time_t t = time(NULL);
-    int tz = configGetTimezone(); /* minutes from GMT */
-    if (configIsDaylightSavingEnabled())
-        tz += 60;
-    t += (time_t)tz * 60;
-    *out = *gmtime(&t);
+    sceCdCLOCK c;
+    if (sceCdReadClock(&c) && !(c.stat & 0x80)) {
+        configConvertToLocalTime(&c);
+        rtc_secs = (uint32_t)(bcd(c.hour) * 3600 + bcd(c.minute) * 60 + bcd(c.second));
+        rtc_at = cp_ms();
+        rtc_ok = 1;
+    }
+    rtc_busy = 0;
 }
 
 int cp_clock(char *out, int len)
 {
-    struct tm tm;
-    local_time(&tm);
-    if (configGetTimeFormat() == TIME_12H) {
-        int h = tm.tm_hour % 12;
-        snprintf(out, len, "%d:%02d %s", h ? h : 12, tm.tm_min, tm.tm_hour < 12 ? "AM" : "PM");
-    } else
-        snprintf(out, len, "%02d:%02d", tm.tm_hour, tm.tm_min);
+    uint32_t now = cp_ms(), t;
+    int h, m;
+    if (!rtc_busy && (!rtc_ok || now - rtc_at > 60000)) {
+        rtc_busy = 1;
+        if (ioPutRequest(IO_CUSTOM_SIMPLEACTION, &rtc_read) < 0)
+            rtc_busy = 0;
+    }
+    if (!rtc_ok) {
+        out[0] = 0;
+        return 0;
+    }
+    t = (rtc_secs + (now - rtc_at) / 1000) % 86400;
+    h = (int)(t / 3600);
+    m = (int)(t / 60 % 60);
+    if (configGetTimeFormat() == TIME_12H)
+        snprintf(out, len, "%d:%02d %s", h % 12 ? h % 12 : 12, m, h < 12 ? "AM" : "PM");
+    else
+        snprintf(out, len, "%02d:%02d", h, m);
     return 1;
 }
 
@@ -1512,7 +1551,7 @@ extern struct UIItem diaPadEmuConfig[];
 static const int HIDE_UI[] = {UICFG_THEME, UICFG_LANG, UICFG_AUTOSORT, UICFG_TXTCOL, UICFG_SELCOL, UICFG_UICOL, UICFG_BGCOL, UICFG_RESETCOL, UICFG_VMODE, UICFG_WIDESCREEN, -1};
 static const int HIDE_DEVICES[] = {CFG_DEBUG, CFG_PS2LOGO, CFG_EXITTO, CFG_ENWRITEOP, CFG_LASTPLAYED, CFG_AUTOSTARTLAST, -1};
 static const int HIDE_GENERAL[] = {CFG_HDDGAMELISTCACHE, CFG_BDMPREFIX, CFG_ETHPREFIX, CFG_HDDSPINDOWN, CFG_BDMMODE, BLOCKDEVICE_BUTTON, CFG_HDDMODE, CFG_ETHMODE,
-                                   CFG_APPMODE, CFG_DEFDEVICE, CFG_BDMCACHE, CFG_HDDCACHE, CFG_SMBCACHE, -1};
+                                   CFG_APPMODE, CFG_DEFDEVICE, CFG_BDMCACHE, CFG_HDDCACHE, CFG_SMBCACHE, CFG_AUTOSTARTLAST, -1};
 static const int HIDE_CONTROLS[] = {UICFG_SCROLL, -1};
 
 static void after_settings(void)
@@ -1755,7 +1794,6 @@ void cp_scan_themes(void)
 int gCryoTrace;
 static int trace_stage;
 static u32 trace_frames;
-static int cryo_up; /* fonts, theme and screens are ready */
 static int in_modal;  /* the last frame came from a modal loop (message box, settings page...) */
 static u32 queue_max; /* most bytes one frame put in the GS queue */
 ctex *cf_debug_page(int i);

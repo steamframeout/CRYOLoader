@@ -35,6 +35,18 @@ static void cacheLoadImage(void *data)
     if (req->cacheUID != req->entry->UID)
         return;
 
+    // Cryo Loader: scrolled past before its turn came. The slot is given back (its owner asks again if
+    // the cover comes back into view), and the thread goes straight on to the covers on screen now
+    if (gCryo && guiFrameId - req->entry->wanted > 12) {
+        if (gCryoTrace)
+            cp_debug("art %d %s: skipped, no longer wanted", req->cache->userId, req->value);
+        req->entry->UID = 0;
+        req->entry->lastUsed = -1;
+        req->entry->qr = NULL;
+        free(req);
+        return;
+    }
+
     // seems okay. we can proceed
     GSTEXTURE *texture = &req->entry->texture;
     texFree(texture);
@@ -139,9 +151,10 @@ GSTEXTURE *cacheGetTexture(image_cache_t *cache, item_list_t *list, int *cacheId
     } else if (*cacheId != -1) {
         cache_entry_t *entry = &cache->content[*cacheId];
         if (entry->UID == *UID) {
-            if (entry->qr)
+            if (entry->qr) {
+                entry->wanted = guiFrameId;
                 return NULL;
-            else if (entry->lastUsed == 0) {
+            } else if (entry->lastUsed == 0) {
                 *cacheId = -2;
                 return NULL;
             } else {
@@ -154,7 +167,8 @@ GSTEXTURE *cacheGetTexture(image_cache_t *cache, item_list_t *list, int *cacheId
     }
 
     // under the cache pre-delay (to avoid filling cache while moving around)
-    if (guiInactiveFrames < list->delay)
+    // (Cryo Loader loads while you scroll, and skips what was scrolled past: see cacheLoadImage)
+    if (!gCryo && guiInactiveFrames < list->delay)
         return NULL;
 
     cache_entry_t *currEntry, *oldestEntry = NULL;
@@ -180,6 +194,7 @@ GSTEXTURE *cacheGetTexture(image_cache_t *cache, item_list_t *list, int *cacheId
 
         cacheClearItem(oldestEntry, 1);
         oldestEntry->qr = req;
+        oldestEntry->wanted = guiFrameId;
         oldestEntry->UID = cache->nextUID;
 
         *UID = cache->nextUID++;

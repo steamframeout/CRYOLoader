@@ -53,8 +53,8 @@ void cset_load(void)
     S.covers = geti("covers", 1);
     S.anim = geti("anim", 1);
     S.bootscreen = geti("bootscreen", 1);
-    S.sfx = geti("sfx", 0);
-    S.pitch = geti("pitch", 0);
+    S.sfx = geti("sfx", 2);     /* Soft */
+    S.pitch = geti("pitch", 2); /* 0.4 */
     if (S.sort < 0 || S.sort > 2)
         S.sort = 0;
     if (S.view < 0 || S.view > 2)
@@ -1585,12 +1585,25 @@ static void prefetch_covers(void)
     if (!S.covers || !U.list || U.dev < 0 || U.screen != SC_LIB)
         return;
     n = U.list->n;
-    for (k = 0; k <= 4; k++) {
-        int a = U.sel + k, b = U.sel - k;
-        if (a >= 0 && a < n)
-            cd_cover(U.dev, U.list->v[a].idx, 1);
-        if (k && b >= 0 && b < n)
-            cd_cover(U.dev, U.list->v[b].idx, 1);
+    {
+        /* nearest first, and further in the direction of travel: the covers about to come into view
+           are loading before they get there. Loads are done in the order asked, and one that has
+           left this window before its turn is skipped (texcache.c) */
+        static int last_sel, dir = 1;
+        int ahead, behind;
+        if (U.sel != last_sel) {
+            dir = U.sel > last_sel ? 1 : -1;
+            last_sel = U.sel;
+        }
+        ahead = 9;
+        behind = 4;
+        for (k = 0; k <= ahead; k++) {
+            int a = U.sel + k * dir, b = U.sel - k * dir;
+            if (a >= 0 && a < n)
+                cd_cover(U.dev, U.list->v[a].idx, 1);
+            if (k && k <= behind && b >= 0 && b < n)
+                cd_cover(U.dev, U.list->v[b].idx, 1);
+        }
     }
 }
 
